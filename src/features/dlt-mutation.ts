@@ -1,10 +1,6 @@
 import { showToast } from "@/pure/component"
-import {
-  getAllLinksFromIDB,
-  mergeLinksToIDB,
-  scrapeAndMergeFgBg,
-} from "./dlt-db"
-import { getAllMyLinkFromPage, getListItems, scrapeWithFgBg } from "./dlt-dom"
+import { getAllLinksFromIDB, scrapeAndMergeFgBg } from "./dlt-db"
+import { getListItems } from "./dlt-dom"
 import { PostLink } from "./dlt-storage"
 import { syncRenderLinkMemo } from "./dlt-link-memo"
 

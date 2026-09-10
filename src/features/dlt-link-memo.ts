@@ -2,6 +2,8 @@ import { showToast } from "@/pure/component"
 import {
   getAllLinksFromIDB,
   mergeLinksToIDB,
+  moveForwardLinks,
+  saveLinksToIDB,
   scrapeAndMergeFgBg,
   setupTabSyncListener,
 } from "./dlt-db"
@@ -9,6 +11,7 @@ import {
   backupLinks,
   DLT_DOCK_KEY,
   DLT_HISTORY_KEY,
+  exportLinks,
   getAt,
   getRecentLinks,
   linkIdText,
@@ -361,9 +364,13 @@ export async function startLinkMemo(option: LinkMemoOption) {
               JSON.stringify(appState.leftDock),
             )
 
-            mergeLinksToIDB([targetUpdated], appState.history).then(m => {
-              appState.history = m.links
-            })
+            // mergeLinksToIDB([targetUpdated], appState.history).then(m => {
+            //   appState.history = m.links
+            // })
+
+            const moved = moveForwardLinks([targetUpdated], appState.history)
+            appState.history = moved
+            await saveLinksToIDB(moved)
 
             // const history = [
             //   targetUpdated,
@@ -406,13 +413,12 @@ export async function startLinkMemo(option: LinkMemoOption) {
       // -------------------------------------------------------------
       if (e.ctrlKey) {
         switch (e.key) {
-          case "n": {
+          case "s": {
             e.preventDefault()
             e.stopPropagation()
             // backup
-            const msg = await backupLinks(appState.history)
-            console.log(msg)
-            showToast(msg)
+            await exportLinks(appState.history)
+            showToast(`exported ${appState.history.length} links`)
             break
           }
           case "o": {
@@ -439,13 +445,6 @@ export async function startLinkMemo(option: LinkMemoOption) {
             e.preventDefault()
             e.stopImmediatePropagation()
             await importWordsJSONArray()
-            break
-          }
-
-          case "s": {
-            e.preventDefault()
-            e.stopImmediatePropagation()
-            await backupUserAdded()
             break
           }
 
@@ -583,6 +582,9 @@ export async function startLinkMemo(option: LinkMemoOption) {
             appState.leftDock.unshift(target)
           }
           localStorage.setItem(DLT_DOCK_KEY, JSON.stringify(appState.leftDock))
+          const moved = moveForwardLinks([target], appState.history)
+          appState.history = moved
+          await saveLinksToIDB(moved)
           break
         }
         case "Backspace": {
@@ -846,7 +848,7 @@ export function renderWidget(state: AppState) {
   }
 }
 
-async function _executeCopy(links: PostLink[]) {
+async function executeCopy(links: PostLink[]) {
   for (const link of links) {
     const s = postLinkText(link)
     await ACtl.setClipboard(s)

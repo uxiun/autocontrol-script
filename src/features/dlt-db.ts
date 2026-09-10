@@ -1,11 +1,13 @@
 import { hasArrayChanged } from "@/pure/utils"
 import { ScrapeResult, scrapeWithFgBg } from "./dlt-dom"
 import {
+  enumerate,
   getAt,
   LinkUpdate,
   MergeLinkResult,
   mergeLinksFast,
   sortByAt,
+  sortByNthAt,
   type PostLink,
 } from "./dlt-storage"
 
@@ -52,7 +54,7 @@ export async function getAllLinksFromIDB(): Promise<PostLink[]> {
 
     request.onsuccess = () => {
       const links: PostLink[] = request.result || []
-      resolve(links.sort(sortByAt)) // ID順から at(時刻)降順へ整列！
+      resolve(links.sort(sortByNthAt)) // ID順から at(時刻)降順へ整列！
     }
     request.onerror = () => reject(request.error)
   })
@@ -198,12 +200,12 @@ export async function mergeFgBgFast(
   )
 
   return {
-    links: [
+    links: enumerate([
       ...result.inserted,
       ...result.updated,
       ...result.moved,
       ...tailPart,
-    ],
+    ]),
     toSave: [
       ...result.inserted,
       ...result.updated,
@@ -284,4 +286,13 @@ export async function deleteAllFgBg() {
   }))
 
   await saveLinksToIDB(fgbgRemoved)
+}
+
+export const moveForwardLinks = (
+  links: PostLink[],
+  allLink: PostLink[],
+): PostLink[] => {
+  const idset = new Set(links.map(l => l.id))
+  const tail = allLink.filter(l => !idset.has(l.id))
+  return enumerate([...links, ...tail])
 }

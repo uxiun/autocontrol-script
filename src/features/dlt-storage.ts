@@ -16,6 +16,8 @@ export interface PostLink {
   bg?: string[] // 後景=子ID
   fgc?: number
   bgc?: number
+
+  nth?: number
 }
 
 export enum Visibility {
@@ -61,6 +63,21 @@ export const sortByAt = (a: PostLink, b: PostLink) => {
   if (atA > atB) return -1
   return 0
 }
+
+export const sortByNthAt = (a: PostLink, b: PostLink) => {
+  const hasA = typeof a.nth === "number"
+  const hasB = typeof b.nth === "number"
+
+  if (hasA && hasB) {
+    return a.nth! - b.nth! // 昇順（0, 1, 2... の順）
+  }
+  if (hasA) return -1 // nth を持つものを優先
+  if (hasB) return 1
+  return sortByAt(a, b) // どちらも nth が無ければ日付順
+}
+
+export const enumerate = (links: PostLink[]): PostLink[] =>
+  links.map((l, nth) => ({ ...l, nth }))
 
 export interface RecentRangeOption {
   startDaysAgo: number // 何日前から（例: 7 = 7日前から）
@@ -234,13 +251,14 @@ export function mergeLinksFast(
     }
   })
 
-  const sorted = [...result.moved, ...filteredHistory].sort(sortByAt)
+  const sorted = [...result.moved, ...filteredHistory]
+  // .sort(sortByAt)
 
   // 💡 結合の並び順: [ 完全新規(inserted) + タイトル更新(updated) ] を最先頭に、その後に既存の順序を維持した配列
   const updatedHistory = [...result.inserted, ...result.updated, ...sorted]
 
   return {
-    links: updatedHistory,
+    links: enumerate(updatedHistory),
     result,
   }
 }
@@ -277,6 +295,25 @@ export const backupLinks = async (current?: PostLink[]) => {
     : `could not saved at ${DLT_SAVE_PATH}`
 }
 
+export const exportJson = (filenamePrefix: string, saveTarget: any) => {
+  // JSON 化してダウンロードリンクを生成
+  const blob = new Blob([JSON.stringify(saveTarget, null, 2)], {
+    type: "application/json",
+  })
+  const url = URL.createObjectURL(blob)
+
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.json`
+  a.click()
+
+  URL.revokeObjectURL(url)
+}
+
+export const exportLinks = async (links: PostLink[]) => {
+  exportJson("dlt-links", links)
+}
+
 export const restoreLinks = async (current?: PostLink[]) => {
   const fileHistory: PostLink[] = await ACtl.getFile(DLT_SAVE_PATH, "json")
   const currentHistory = current ?? (await getAllLinksFromIDB())
@@ -307,10 +344,10 @@ export const restoreLinks = async (current?: PostLink[]) => {
   const mergedList = Array.from(unionMap.values())
 
   // 💡 ここがコア： at 属性の降順（新しい順）で並び替える。at が無いものは末尾（過去）へ。
-  mergedList.sort(sortByAt)
+  // mergedList.sort(sortByAt)
 
   // localStorage.setItem(DLT_HISTORY_KEY, JSON.stringify(mergedList))
-  await saveLinksToIDB(mergedList)
+  await saveLinksToIDB(enumerate(mergedList))
   const msg = `${mergedList.length}件(+${newlyAdded.length})復元`
   console.log(msg)
   showToast(msg)

@@ -294,7 +294,7 @@ class InlineSuggestPopup {
     this.el.id = "dlt-inline-ime-popup"
     Object.assign(this.el.style, {
       position: "fixed",
-      zIndex: "2147483647",
+      zIndex: "100000",
       background: "transparent",
       border: "none",
       boxShadow: "none",
