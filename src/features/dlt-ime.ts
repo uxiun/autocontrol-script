@@ -212,11 +212,20 @@ export function dltIME(option = defaultIMEOption) {
     true,
   )
 
-  // キーハイジャックリスナー（キャプチャフェーズ）
   window.addEventListener(
     "keydown",
     e => {
       if (!imeState.isActive || isImeCandidateVisible()) return
+      const imePopup = document.getElementById("ac-inline-ime-popup")
+      if (imePopup)
+        console.log("imePopup.style.display:", imePopup.style.display)
+      if (
+        imePopup?.hasAttribute("data-visible")
+        // imePopup && imePopup.style.display !== "none"
+      )
+        // e.preventDefault()
+        // e.stopImmediatePropagation()
+        return
 
       const target = e.target as HTMLTextAreaElement | HTMLInputElement
 

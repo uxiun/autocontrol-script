@@ -10,7 +10,7 @@ const dist = process.argv.includes("--dist") // --watch オプションの有無
 const distDir = dist ? "./dist" : process.env.AC_DIST_DIR || "./dist"
 
 async function run() {
-  const entryPoints = globSync("src/*.ts")
+  const entryPoints = globSync(["src/*.ts", "src/*.js"])
 
   // 1. 共通の設定オブジェクトを作成
   const options = {

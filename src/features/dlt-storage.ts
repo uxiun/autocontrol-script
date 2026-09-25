@@ -17,7 +17,8 @@ export interface PostLink {
   fgc?: number
   bgc?: number
 
-  nth?: number
+  // nth?: number
+  upd?: string // 36進法時刻印
 }
 
 export enum Visibility {
@@ -29,6 +30,14 @@ export const VISIBILITY_MAP = {
   [Visibility.Everyone]: "0",
   [Visibility.OnlyMe]: "14",
 }
+
+export const visibilityFromValue = (value: string) =>
+  value === "0"
+    ? Visibility.Everyone
+    : value === "14"
+      ? Visibility.OnlyMe
+      : undefined
+
 export const VISIBILITY_JP = {
   [Visibility.Everyone]: "公開",
   [Visibility.OnlyMe]: "未公開",
@@ -37,7 +46,7 @@ export const VISIBILITY_JP = {
 export const nextVisValue = (current: string): string => {
   const a = Object.entries(VISIBILITY_MAP)
   const i = a.findIndex(([vis, value]) => value === current)
-  const [_, value] = a[i + 1]
+  const [_, value] = a[(i + 1) % a.length]
   console.log({ current, value })
   return value
 }
@@ -64,20 +73,28 @@ export const sortByAt = (a: PostLink, b: PostLink) => {
   return 0
 }
 
-export const sortByNthAt = (a: PostLink, b: PostLink) => {
-  const hasA = typeof a.nth === "number"
-  const hasB = typeof b.nth === "number"
-
-  if (hasA && hasB) {
-    return a.nth! - b.nth! // 昇順（0, 1, 2... の順）
-  }
-  if (hasA) return -1 // nth を持つものを優先
-  if (hasB) return 1
-  return sortByAt(a, b) // どちらも nth が無ければ日付順
+export const sortByUpd = (a: PostLink, b: PostLink) => {
+  const updA = a.upd || a.at || ""
+  const updB = b.upd || b.at || ""
+  if (updA < updB) return 1
+  if (updA > updB) return -1
+  return 0
 }
 
-export const enumerate = (links: PostLink[]): PostLink[] =>
-  links.map((l, nth) => ({ ...l, nth }))
+// export const sortByNthAt = (a: PostLink, b: PostLink) => {
+//   const hasA = typeof a.nth === "number"
+//   const hasB = typeof b.nth === "number"
+
+//   if (hasA && hasB) {
+//     return a.nth! - b.nth! // 昇順（0, 1, 2... の順）
+//   }
+//   if (hasA) return -1 // nth を持つものを優先
+//   if (hasB) return 1
+//   return sortByAt(a, b) // どちらも nth が無ければ日付順
+// }
+
+// export const enumerate = (links: PostLink[], startIndex?: number): PostLink[] =>
+//   links.map((l, nth) => ({ ...l, nth: (startIndex ?? 0) + nth }))
 
 export interface RecentRangeOption {
   startDaysAgo: number // 何日前から（例: 7 = 7日前から）
@@ -124,8 +141,12 @@ export function getRecentLinks(
   })
 }
 
-export const useCount = (l: PostLink) =>
-  l.use ? { ...l, use: l.use + 1 } : { ...l, use: 1 }
+export const useCount = (l: PostLink): PostLink => {
+  const use = l.use ? l.use + 1 : 1
+  const upd = getAt()
+  const at = l.at || upd
+  return { ...l, use, at, upd }
+}
 
 export const postLinkText = (postLink: PostLink) =>
   `{${postLink.title} ${linkIdText(postLink)}}`
@@ -219,10 +240,12 @@ export function mergeLinksFast(
       const newLink = newLinksMap.get(oldLink.id)!
       if (oldLink.title !== newLink.title) {
         // タイトルが更新された：新しいatを付与して先頭送りのため、ここでは弾く
-        const updatedLink = { ...newLink, at: currentTime }
+        const updatedLink = { ...newLink, upd: currentTime }
         result.updated.push(updatedLink)
         return false
-      } else if ((oldLink.at ?? "") < (newLink.at ?? "")) {
+      } else if (
+        (oldLink.upd || oldLink.at || "") < (newLink.upd || newLink.at || "")
+      ) {
         result.moved.push(newLink)
         return false
       } else {
@@ -246,19 +269,18 @@ export function mergeLinksFast(
       !result.moved.some(l => l.id === newLink.id) &&
       !result.updated.some(l => l.id === newLink.id)
     ) {
-      const insertedLink = { ...newLink, at: currentTime }
+      const insertedLink = { ...newLink, at: currentTime, upd: currentTime }
       result.inserted.push(insertedLink)
     }
   })
 
-  const sorted = [...result.moved, ...filteredHistory]
-  // .sort(sortByAt)
+  const sorted = [...result.moved, ...filteredHistory].sort(sortByUpd)
 
   // 💡 結合の並び順: [ 完全新規(inserted) + タイトル更新(updated) ] を最先頭に、その後に既存の順序を維持した配列
   const updatedHistory = [...result.inserted, ...result.updated, ...sorted]
 
   return {
-    links: enumerate(updatedHistory),
+    links: updatedHistory,
     result,
   }
 }
@@ -344,10 +366,10 @@ export const restoreLinks = async (current?: PostLink[]) => {
   const mergedList = Array.from(unionMap.values())
 
   // 💡 ここがコア： at 属性の降順（新しい順）で並び替える。at が無いものは末尾（過去）へ。
-  // mergedList.sort(sortByAt)
+  mergedList.sort(sortByUpd)
 
   // localStorage.setItem(DLT_HISTORY_KEY, JSON.stringify(mergedList))
-  await saveLinksToIDB(enumerate(mergedList))
+  await saveLinksToIDB(mergedList)
   const msg = `${mergedList.length}件(+${newlyAdded.length})復元`
   console.log(msg)
   showToast(msg)

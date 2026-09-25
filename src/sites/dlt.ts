@@ -7,7 +7,8 @@ export default function runDlt() {
   dltIME({ suggestionNumbers: 10 })
   startLinkMemo({
     toggleKeys: ["l"], // Alt
-    searchKeys: ["s", "/", "i"],
+    searchKeys: ["s", "/", "i", "Tab"],
+    linkHintKeys: ["m"],
   })
   // onTabLoadIME()
   dltCursor()

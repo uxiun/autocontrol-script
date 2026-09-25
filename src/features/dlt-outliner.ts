@@ -6,6 +6,8 @@ export default async function outlinerShortcuts(e: KeyboardEvent) {
       (activeEl as HTMLElement).tagName === "TEXTAREA" ||
       (activeEl as HTMLElement).isContentEditable)
   if (!isInput) return
+  const imePopup = document.getElementById("ac-inline-ime-popup")
+  if (imePopup?.hasAttribute("data-visible")) return
 
   if (
     activeEl instanceof HTMLInputElement ||

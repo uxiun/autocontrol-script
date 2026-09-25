@@ -1,13 +1,11 @@
 import { hasArrayChanged } from "@/pure/utils"
 import { ScrapeResult, scrapeWithFgBg } from "./dlt-dom"
 import {
-  enumerate,
   getAt,
   LinkUpdate,
   MergeLinkResult,
   mergeLinksFast,
-  sortByAt,
-  sortByNthAt,
+  sortByUpd,
   type PostLink,
 } from "./dlt-storage"
 
@@ -36,6 +34,7 @@ export function openDB(): Promise<IDBDatabase> {
         store.createIndex("by_at", "at", { unique: false })
         store.createIndex("by_fg", "fg", { unique: false, multiEntry: true })
         store.createIndex("by_bg", "bg", { unique: false, multiEntry: true })
+        store.createIndex("by_upd", "upd", { unique: false })
       }
     }
 
@@ -54,11 +53,28 @@ export async function getAllLinksFromIDB(): Promise<PostLink[]> {
 
     request.onsuccess = () => {
       const links: PostLink[] = request.result || []
-      resolve(links.sort(sortByNthAt)) // ID順から at(時刻)降順へ整列！
+      resolve(links.sort(sortByUpd)) // ID順から at(時刻)降順へ整列！
     }
     request.onerror = () => reject(request.error)
   })
 }
+
+// export async function getAllLinksSorted(): Promise<PostLink[]> {
+//   const db = await openDB()
+//   return new Promise((resolve, reject) => {
+//     const tx = db.transaction(STORE_NAME, "readonly")
+//     const store = tx.objectStore(STORE_NAME)
+//     const index = store.index("by_upd")
+//     const request = index.getAll()
+
+//     request.onsuccess = () => {
+//       const links: PostLink[] = request.result || []
+//       // resolve(links.sort(sortByUpd)) // ID順から at(時刻)降順へ整列！
+//       resolve(links)
+//     }
+//     request.onerror = () => reject(request.error)
+//   })
+// }
 
 type LinkMap = Map<string, PostLink>
 
@@ -184,10 +200,10 @@ export async function mergeFgBgFast(
     if (!u) return [oldLink]
     let l = u.link
     if (u.update.type === "modify" && u.update.title) {
-      l.at = currentTime
+      l.upd = currentTime
       result.updated.push(l)
       return []
-    } else if ((oldLink.at ?? "") < (l.at ?? "")) {
+    } else if ((oldLink.upd || oldLink.at || "") < (l.upd || l.at || "")) {
       result.moved.push(l)
       return []
     }
@@ -196,20 +212,20 @@ export async function mergeFgBgFast(
   })
 
   result.inserted = linkUpdates.flatMap(u =>
-    u.update.type === "inserted" ? [{ ...u.link, at: currentTime }] : [],
+    u.update.type === "inserted"
+      ? [{ ...u.link, at: currentTime, upd: currentTime }]
+      : [],
   )
 
   return {
-    links: enumerate([
+    links: [
       ...result.inserted,
       ...result.updated,
       ...result.moved,
       ...tailPart,
-    ]),
+    ],
     toSave: [
-      ...result.inserted,
-      ...result.updated,
-      ...result.moved,
+      ...[...result.inserted, ...result.updated, ...result.moved],
       ...fgbgUpdated,
     ],
     result,
@@ -268,9 +284,9 @@ export function setupTabSyncListener(onUpdate: (diff: PostLink[]) => void) {
 
 export async function mergeLinksToIDB(links: PostLink[], allLink?: PostLink[]) {
   const all = allLink || (await getAllLinksFromIDB())
-  const m = mergeLinksFast(all, links)
-  await saveLinksToIDB(Object.values(m.result).flat())
-  return m
+  const res = mergeLinksFast(all, links)
+  await saveLinksToIDB(res.links)
+  return res
 }
 
 export async function deleteAllFgBg() {
@@ -288,11 +304,11 @@ export async function deleteAllFgBg() {
   await saveLinksToIDB(fgbgRemoved)
 }
 
-export const moveForwardLinks = (
-  links: PostLink[],
-  allLink: PostLink[],
-): PostLink[] => {
-  const idset = new Set(links.map(l => l.id))
-  const tail = allLink.filter(l => !idset.has(l.id))
-  return enumerate([...links, ...tail])
-}
+// export const moveForwardLinks = (
+//   links: PostLink[],
+//   allLink: PostLink[],
+// ): PostLink[] => {
+//   const idset = new Set(links.map(l => l.id))
+//   const tail = allLink.filter(l => !idset.has(l.id))
+//   return [...links, ...tail]
+// }

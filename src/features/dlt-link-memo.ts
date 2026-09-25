@@ -2,7 +2,6 @@ import { showToast } from "@/pure/component"
 import {
   getAllLinksFromIDB,
   mergeLinksToIDB,
-  moveForwardLinks,
   saveLinksToIDB,
   scrapeAndMergeFgBg,
   setupTabSyncListener,
@@ -14,7 +13,6 @@ import {
   exportLinks,
   getAt,
   getRecentLinks,
-  linkIdText,
   MergeLinkResult,
   mergeLinksFast,
   PostLink,
@@ -29,14 +27,13 @@ import { HintMap, linkHint } from "./link-hint"
 import { candidateLink } from "./dlt-component"
 import { dltShortcuts } from "./dlt-shortcuts"
 import outlinerShortcuts from "./dlt-outliner"
-import { isImeActive } from "./dlt-ime"
 import {
-  backupUserAdded,
   getImeState,
   importWordsJSONArray,
   initializeCache,
   restoreUserAdded,
 } from "./ime"
+import { dltHintMap, DltHintMapState } from "./dlt-dom"
 
 export interface AppState {
   history: PostLink[]
@@ -80,6 +77,7 @@ export async function syncRenderLinkMemo(links?: PostLink[]) {
 interface LinkMemoOption {
   toggleKeys: string[]
   searchKeys: string[]
+  linkHintKeys: string[]
 }
 
 export async function startLinkMemo(option: LinkMemoOption) {
@@ -167,7 +165,7 @@ export async function startLinkMemo(option: LinkMemoOption) {
   })
 
   let isAltDown = false
-  window.addEventListener("keyup", e => {
+  window.addEventListener("keyup", async e => {
     if (e.code === "AltLeft") {
       if (isAltDown) {
         e.preventDefault()
@@ -176,7 +174,7 @@ export async function startLinkMemo(option: LinkMemoOption) {
           appState.isWidgetActive = false
         } else {
           // syncLocalStorage(appState)
-          syncIDB(appState)
+          await syncIDB(appState)
           appState.isWidgetActive = true
           appState.isSearching = false
           appState.searchQuery = ""
@@ -197,7 +195,10 @@ export async function startLinkMemo(option: LinkMemoOption) {
 
       // 【超重要】リンクヒントモード（自動リンク）が動いている間は、このメモ小窓の全ショトカを完全スルー
       if ((window as any).__dlt_link_hint_active__) return
-      if (isImeActive()) return
+      // if (isImeActive()) return
+      const imePopup = document.getElementById("ac-inline-ime-popup")
+      console.log("imePopup.style.display", imePopup?.style.display)
+      if (imePopup && imePopup.style.display !== "none") return
 
       // 1. 修飾キーがすべて false であること
       const noModifiers = !e.ctrlKey && !e.altKey && !e.shiftKey && !e.metaKey
@@ -222,13 +223,23 @@ export async function startLinkMemo(option: LinkMemoOption) {
           e.preventDefault()
           e.stopPropagation()
           // syncLocalStorage(state)
-          syncIDB(appState)
+          await syncIDB(appState)
           appState.isWidgetActive = true
           appState.isSearching = false
           appState.searchQuery = ""
           appState.currentPage = 0
           appState.cursorIndex = 0
           renderWidget(appState)
+        }
+
+        if (!isInput && noModifiers && option.linkHintKeys.includes(e.key)) {
+          e.preventDefault()
+          e.stopPropagation()
+          linkHint(dltHintMap, {
+            fgOrBg: "bg",
+            mode: "open",
+            openInNewTab: true,
+          } as DltHintMapState)
         }
 
         outlinerShortcuts(e)
@@ -338,7 +349,13 @@ export async function startLinkMemo(option: LinkMemoOption) {
           appState.cursorIndex = 0
 
           handleSearch("", appState)
-          executeLinkOperation(appState.leftDock, getAt())
+          const dock = [...appState.leftDock]
+          const res = executeLinkOperation(appState.leftDock, getAt())
+          if (res.executed) {
+            const updated = dock.map(useCount)
+            const res = await mergeLinksToIDB(updated, appState.history)
+            appState.history = res.links
+          }
           handleSearch("", appState)
           renderWidget(appState)
           return
@@ -356,8 +373,8 @@ export async function startLinkMemo(option: LinkMemoOption) {
           e.stopPropagation()
           const target = currentItems[appState.cursorIndex]
           if (target) {
-            const targetUpdated = useCount({ ...target, at: getAt() })
-            appState.leftDock.push(targetUpdated)
+            // const targetUpdated = useCount({ ...target, at: getAt() })
+            appState.leftDock.push(target)
             // 💡 localStorage にも保存して他タブに通知
             localStorage.setItem(
               DLT_DOCK_KEY,
@@ -368,16 +385,9 @@ export async function startLinkMemo(option: LinkMemoOption) {
             //   appState.history = m.links
             // })
 
-            const moved = moveForwardLinks([targetUpdated], appState.history)
-            appState.history = moved
-            await saveLinksToIDB(moved)
-
-            // const history = [
-            //   targetUpdated,
-            //   ...state.history.filter(link => link.id !== target.id),
-            // ]
-            // state.history = history
-            // localStorage.setItem(DLT_HISTORY_KEY, JSON.stringify(history))
+            // const moved = moveForwardLinks([targetUpdated], appState.history)
+            // appState.history = moved
+            // await saveLinksToIDB(moved)
 
             appState.searchQuery = ""
             appState.currentPage = 0
@@ -475,6 +485,7 @@ export async function startLinkMemo(option: LinkMemoOption) {
         const index = Number(e.key) - 1
         console.log("index", index)
         appState.leftDock.splice(index, 1)
+        localStorage.setItem(DLT_DOCK_KEY, JSON.stringify(appState.leftDock))
         renderWidget(appState)
         return
       }
@@ -582,9 +593,9 @@ export async function startLinkMemo(option: LinkMemoOption) {
             appState.leftDock.unshift(target)
           }
           localStorage.setItem(DLT_DOCK_KEY, JSON.stringify(appState.leftDock))
-          const moved = moveForwardLinks([target], appState.history)
-          appState.history = moved
-          await saveLinksToIDB(moved)
+          // const moved = moveForwardLinks([target], appState.history)
+          // appState.history = moved
+          // await saveLinksToIDB(moved)
           break
         }
         case "Backspace": {
@@ -597,7 +608,13 @@ export async function startLinkMemo(option: LinkMemoOption) {
         case " ": {
           e.preventDefault()
           e.stopPropagation()
-          executeLinkOperation(appState.leftDock, getAt())
+          const dock = [...appState.leftDock]
+          const res = executeLinkOperation(appState.leftDock, getAt())
+          if (res.executed) {
+            const updated = dock.map(useCount)
+            const res = await mergeLinksToIDB(updated, appState.history)
+            appState.history = res.links
+          }
           break
         }
         case "Tab": {
@@ -910,16 +927,11 @@ function executeLinkOperation(links: PostLink[], at: string) {
                   })
 
                   input.dispatchEvent(enterEvent)
-
-                  const timestamped = links.map(link =>
-                    useCount({ ...link, at }),
-                  )
-                  const res = mergeLinksFast(appState.history, timestamped)
                   appState.leftDock = []
 
                   setTimeout(async () => {
                     console.log("after executeLinkOperation")
-                    const m = await scrapeAndMergeFgBg(true, res.links)
+                    const m = await scrapeAndMergeFgBg(true, appState.history)
                     appState.history = m.links
                     renderWidget(appState)
                   }, 300)

@@ -1,4 +1,4 @@
-import { sleep } from "@/pure/utils"
+import { isInput, sleep } from "@/pure/utils"
 import { dltkeys } from "./keys"
 import { applyAll, defineTerminalTarget, HintMap, linkHint } from "./link-hint"
 import {
@@ -8,14 +8,50 @@ import {
   VISIBILITY_MAP,
 } from "./dlt-storage"
 import { showToast } from "@/pure/component"
+import {
+  closestUpubSeldButton,
+  getListItems,
+  toggleVisibility,
+} from "./dlt-dom"
 
-export default async function togglePublicityDrw() {
-  const btns = Array.from(
-    document.querySelectorAll<HTMLButtonElement>("#drw .upub button"),
-  )
-  const i = btns.findIndex(btn => btn.classList.contains("seld"))
-  btns[i].classList.remove("seld")
-  btns[(i + 1) % btns.length].classList.add("seld")
+export default async function togglePublicityDrw(
+  action: "toggleCurrentActiveOrDrw" | "setAllPublic" | "setAllPrivate",
+) {
+  // document.activeElement?.closest("article.mg.oln") ??
+
+  if (action === "toggleCurrentActiveOrDrw") {
+    if (isInput() && document.activeElement?.closest("#drw")) {
+      console.log("from #drw input")
+      const el = document.querySelector("#drw article")
+      toggleVisibility(el, "toggle")
+    } else if (
+      isInput() &&
+      document.activeElement
+        ?.closest("article.mg.oln")
+        ?.querySelector(".dln.ed")
+    ) {
+      console.log("from editing input")
+      const active = document.activeElement as
+        | HTMLInputElement
+        | HTMLTextAreaElement
+      await selectVisibilityClick(active.closest("article.mg"), "toggle")
+      active.focus()
+    }
+  } else {
+    const items = document.querySelectorAll("article.mg")
+    const vis =
+      action === "setAllPrivate" ? Visibility.OnlyMe : Visibility.Everyone
+    for (const el of items) {
+      await selectVisibilityClick(el, vis)
+    }
+  }
+
+  // const btns = Array.from(
+  //   document.querySelectorAll<HTMLButtonElement>("#drw .upub button"),
+  // )
+  // const i = btns.findIndex(btn => btn.classList.contains("seld"))
+  // btns[i].classList.remove("seld")
+  // btns[(i + 1) % btns.length].classList.add("seld")
 
   // upub.click()
   // await sleep(200)
@@ -31,15 +67,16 @@ export function togglePublicity() {
       defineTerminalTarget({
         type: "terminal",
         keys: dltkeys.easy,
-        elements: () =>
-          document.querySelectorAll<HTMLButtonElement>(".upub button"),
+        elements: () => document.querySelectorAll<HTMLElement>("h1.ikon"),
         action: async (el, state) => {
-          el.click()
-          await sleep(200)
-          selectPubButton(
-            nextVisValue(el.value),
-            document.querySelector(".upub.mini"),
-          )
+          // closestUpubSeldButton(el)?.click()
+          // await sleep(200)
+          // selectPubButton(
+          //   nextVisValue(el.value),
+          //   document.querySelector(".upub.mini"),
+          // )
+
+          await selectVisibilityClick(el.closest("article.mg"), "toggle")
         },
       }),
     ],
@@ -68,6 +105,33 @@ export function setVisibilityAll(visibility: Visibility) {
   )
 
   showToast(`${n}個の輪郭を${VISIBILITY_JP[visibility]}状態にしました`)
+}
+
+const selectVisibilityClick = async (
+  baseArticle: Element | null | undefined,
+  action: "toggle" | Visibility,
+  clickSleepMs = 100,
+) => {
+  if (!baseArticle) return
+  const seld = closestUpubSeldButton(baseArticle)
+  if (!seld) return
+  seld.click()
+  await sleep(clickSleepMs)
+  const mini = baseArticle.querySelector(".upub.mini")
+  if (!mini) return
+  const buttons = [
+    ...mini.querySelectorAll(":scope > button"),
+  ] as HTMLButtonElement[]
+  const currentValue = seld.getAttribute("value")
+  const value =
+    action === "toggle"
+      ? currentValue
+        ? nextVisValue(currentValue)
+        : VISIBILITY_MAP[Visibility.OnlyMe]
+      : VISIBILITY_MAP[action]
+  const i = buttons.findIndex(b => b.value === value)
+
+  buttons[i].click()
 }
 
 const selectPubButton = (value: string, mini: Element | null) => {

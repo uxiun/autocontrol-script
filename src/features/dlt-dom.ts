@@ -1,12 +1,21 @@
-import { linkSync } from "node:fs"
 import {
+  DLT_DOCK_KEY,
   DLT_MY_ID,
-  IdTitleMap,
+  getAt,
+  nextVisValue,
   PostLink,
   removeDuplicateOrEmpty,
+  useCount,
+  Visibility,
+  VISIBILITY_MAP,
+  visibilityFromValue,
 } from "./dlt-storage"
-import { dbg } from "@/pure/utils"
+import { entriesMap } from "@/pure/utils"
 import { showToast } from "@/pure/component"
+import { HintMap } from "./link-hint"
+import { dltkeys } from "./keys"
+import { showStatusTooltip } from "@/pure/tooltip"
+import { getVisibleElements } from "@/pure/dom"
 
 type GetLinkOption = {
   limitOwn: boolean
@@ -336,3 +345,257 @@ const fgBgCount = (bln: Element) => {
 export const getListItems = (limitOwn = true) => {
   return document.querySelectorAll(`.pg > .bln${limitOwn ? ".I" : ""}`)
 }
+
+// export const dltFgBgHint: HintMap<{ param: "fg" | "bg" }> = {
+//   changeState: new Map([
+//     [" ", state => (state.param === "bg" ? { param: "fg" } : { param: "bg" })],
+//   ]),
+//   showState: state => showToast(`param: ${state.param}`),
+//   targetElements: [
+//     {
+//       type: "terminal",
+//       keys: dltkeys.easy,
+//       elements: () => [
+//         ...Array.from(document.querySelectorAll("h2.ikon")),
+//         ...Array.from(document.querySelectorAll(".oln.ikon.bln")),
+//       ],
+//       action(el, state) {
+//         const link = getLinkAuto(el)
+//         if (!link) {
+//           showToast("遷移先が見つかりませんでした")
+//           return
+//         }
+//       },
+//     },
+//   ],
+// }
+
+export type DltHintMapState = {
+  mode: "open" | "pick"
+  openInNewTab: boolean
+  fgOrBg: "fg" | "bg"
+}
+
+type State = DltHintMapState
+
+const actionWith =
+  (
+    getUrl: (el: Element, s: State) => string | null | undefined,
+    getLinkElement: (el: Element) => Element | null | undefined,
+  ) =>
+  (el: Element, s: State) => {
+    if (s.mode === "open") {
+      const url = getUrl(el, s)
+      if (!url) return
+
+      if (s?.openInNewTab) {
+        window.open(url, "_blank", "noopener,noreferrer")
+      } else {
+        window.location.href = url
+      }
+    } else {
+      const dock: PostLink[] = JSON.parse(
+        localStorage.getItem(DLT_DOCK_KEY) || "[]",
+      )
+      const newDock = [
+        ...getLinkAuto(getLinkElement(el)).map(l =>
+          useCount({ ...l, at: getAt() }),
+        ),
+        ...dock,
+      ]
+
+      localStorage.setItem(DLT_DOCK_KEY, JSON.stringify(newDock))
+
+      // 💡【新設】同じタブ内の全スクリプトに向けて「台が変わったぞ」と叫ぶ
+      window.dispatchEvent(
+        new CustomEvent("dlt-dock-updated", { detail: newDock }),
+      )
+    }
+  }
+
+const dataKnoToUrl =
+  (s: { fgOrBg: string }) => (oln: Element | null | undefined) => {
+    if (oln) {
+      const kno = oln.getAttribute("data-kno")
+      if (kno) {
+        return `https://dlt.kitetu.com/?${s.fgOrBg}=${kno.replace("#", "No.")}`
+      }
+    }
+  }
+
+export const dltHintMap: HintMap<State> = {
+  changeState: entriesMap({
+    backspace: s => ({
+      ...s,
+      mode: s.mode === "open" ? "pick" : "open",
+    }),
+    " ": s => ({
+      ...s,
+      openInNewTab: !s.openInNewTab,
+    }),
+    enter: s => ({
+      ...s,
+      fgOrBg: s.fgOrBg === "bg" ? "fg" : "bg",
+    }),
+  }),
+
+  showState: s => {
+    console.log("現在の状態:", s)
+    const message =
+      s.mode === "open"
+        ? `${s.fgOrBg === "fg" ? "後景" : "前景"}を${s.openInNewTab ? "新しい" : "現在の"}タブで開く`
+        : "リンク収集"
+
+    showStatusTooltip(message)
+  },
+
+  // nonTerminal: null,
+
+  targetElements: [
+    {
+      type: "terminal",
+      keys: dltkeys.easyL,
+      elements: () => getVisibleElements(".pg > .bln article.mg.oln .kno a"),
+      action: actionWith(
+        (el, s) => dataKnoToUrl(s)(el.closest("article.oln")),
+        e => e.closest("article.oln"),
+      ),
+      hintOffsetPx: [50, 0],
+    },
+    {
+      type: "non-terminal",
+      keys: dltkeys.easyR,
+      elements: () => getVisibleElements(".pg > .bln"),
+
+      hintMap: el => {
+        const queryFg = ":scope > .oln > .knob.l"
+        const queryBg = ":scope > article > .bg > .oln > .knob.l"
+
+        const action = actionWith(
+          (el, s) => dataKnoToUrl(s)(el.parentElement),
+          e => e.closest(".oln"),
+        )
+
+        return {
+          changeState: entriesMap({
+            " ": s => ({
+              ...s,
+              mode: s.mode === "open" ? "pick" : "open",
+            }),
+            backspace: s => ({
+              ...s,
+              openInNewTab: !s.openInNewTab,
+            }),
+            enter: s => ({
+              ...s,
+              fgOrBg: s.fgOrBg === "bg" ? "fg" : "bg",
+            }),
+          }),
+
+          showState: s => {
+            console.log("現在の状態:", s)
+            const message =
+              s.mode === "open"
+                ? `${s.fgOrBg === "fg" ? "後景" : "前景"}を${s.openInNewTab ? "新しい" : "現在の"}タブで開く`
+                : "リンク収集"
+            showStatusTooltip(message)
+          },
+
+          targetElements: [
+            {
+              type: "terminal",
+              keys: dltkeys.easyL,
+              elements: () => getVisibleElements(queryFg, el),
+              action,
+              hintOffsetPx: [-10, 0],
+            },
+            {
+              type: "terminal",
+              keys: dltkeys.easyR,
+              elements: () => getVisibleElements(queryBg, el),
+              action,
+              hintOffsetPx: [-10, 0],
+            },
+          ],
+        }
+      },
+    },
+  ],
+}
+
+export const closestUpubSeldButton = (el: Element) =>
+  [...(el.closest("article.mg")?.querySelectorAll(".upub button") ?? [])].find(
+    btn => btn.classList.contains("seld"),
+  ) as HTMLButtonElement | undefined
+
+export const toggleVisibility = (
+  closestBaseElement: Element | null | undefined,
+  action: "toggle" | Visibility,
+): undefined | { last: Visibility; current: Visibility } => {
+  if (!closestBaseElement) return
+  const article = closestBaseElement.closest("article.mg.oln")
+  if (!article) return
+  const btns = [...article.querySelectorAll(".upub button")]
+  if (!btns) return
+
+  const i = btns.findIndex(btn => btn.classList.contains("seld"))
+
+  const seld = btns[i]
+  const value = seld.getAttribute("value")!
+  const last = visibilityFromValue(value)!
+
+  if (action === last) return { last, current: last }
+
+  let next =
+    action === "toggle"
+      ? btns[(i + 1) % btns.length]
+      : btns.find(btn => btn.getAttribute("value")! === VISIBILITY_MAP[last])
+
+  if (!next) return
+
+  seld.classList.remove("seld")
+  next.classList.add("seld")
+
+  const current =
+    action === "toggle"
+      ? visibilityFromValue(next.getAttribute("value")!)!
+      : action
+
+  return { last, current }
+}
+
+// export const toggleVisibilityClick = (
+//   closestBaseElement: Element,
+//   action: "toggle" | Visibility,
+// ): undefined | { last: Visibility; current: Visibility } => {
+//   const article = closestBaseElement.closest("article.mg.oln")
+//   if (!article) return
+//   const btns = [...article.querySelectorAll(".upub button")]
+//   if (!btns) return
+
+//   const i = btns.findIndex(btn => btn.classList.contains("seld"))
+
+//   const seld = btns[i] as HTMLButtonElement
+//   const value = seld.getAttribute("value")!
+//   const last = visibilityFromValue(value)!
+
+//   if (action === last) return { last, current: last }
+
+//   let n = 1
+//   if (action !== "toggle") {
+//     const j = btns.findIndex(
+//       btn => btn.getAttribute("value")! === VISIBILITY_MAP[last],
+//     )
+//     if (i < j) n = j - i
+//     else n = j + btns.length - i
+//   }
+
+//   // seld.classList.remove("seld")
+//   // next.classList.add("seld")
+
+//   seld.click()
+
+//   const current = action === "toggle" ? nextVisValue(last) : action
+
+//   return { last, current }
+// }

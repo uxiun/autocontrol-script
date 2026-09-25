@@ -131,7 +131,7 @@ const dataKnoToUrl =
     }
   }
 
-const perSiteLaunch = {
+const linkHintPerSite = {
   "dlt.kitetu.com": () => {
     type State = {
       mode: "open" | "pick"
@@ -277,14 +277,14 @@ const perSiteLaunch = {
       ],
     }
 
-    linkHint(hm, { mode: "pick", openInNewTab: false, fgOrBg: "bg" } as State)
+    linkHint(hm, { mode: "open", openInNewTab: true, fgOrBg: "bg" } as State)
   },
 }
 
 function main() {
   const currentHost = window.location.hostname
   const perSiteLaunchMap: Map<string, () => void> = new Map(
-    Object.entries(perSiteLaunch),
+    Object.entries(linkHintPerSite),
   )
   const f = perSiteLaunchMap.get(currentHost)
   if (f) f()

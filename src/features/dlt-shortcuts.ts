@@ -1,12 +1,14 @@
 import { isInput } from "@/pure/utils"
 import { getPageType } from "./dlt-dom"
-import togglePublicityDrw from "./dlt-toggle-publicity"
+import togglePublicityDrw, { togglePublicity } from "./dlt-toggle-publicity"
 import { showCommandPalette } from "@/commandPalette"
 
 export async function dltShortcuts(e: KeyboardEvent) {
   if (!e.isTrusted || (window as any).__dlt_link_hint_active__) return
 
-  if (!isInput() && e.key === "h") {
+  const cursorOnInput = isInput()
+
+  if (!cursorOnInput && e.key === "h") {
     // const pageType = getPageType()
     // if (!(pageType === "bg" || pageType === "fg")) return
     e.preventDefault()
@@ -35,11 +37,23 @@ export async function dltShortcuts(e: KeyboardEvent) {
     return
   }
 
-  if ((!isInput() || e.ctrlKey) && e.key === "s") {
+  if ((!cursorOnInput || e.ctrlKey) && e.key === "s") {
     e.preventDefault()
     e.stopPropagation()
-    togglePublicityDrw()
+    togglePublicityDrw("toggleCurrentActiveOrDrw")
     return
+  }
+
+  if (!cursorOnInput && e.key === "w") {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    togglePublicity()
+  }
+
+  if (!cursorOnInput && e.key === "v") {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    togglePublicityDrw("setAllPublic")
   }
 
   if (
