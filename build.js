@@ -23,7 +23,9 @@ async function run() {
     define: {
       "process.env.NODE_ENV": '"production"', // ★3: ライブラリ内の process 参照エラーを防止
     },
-    // plugins: [tsconfigPathsPlugin()],
+    // banner: {
+    //   js: `import "@/pure/prototypes"`,
+    // },
   }
 
   if (isWatch) {

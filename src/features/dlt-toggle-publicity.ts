@@ -19,26 +19,31 @@ export default async function togglePublicityDrw(
 ) {
   // document.activeElement?.closest("article.mg.oln") ??
 
+  const cursorOnInput = isInput()
+
   if (action === "toggleCurrentActiveOrDrw") {
-    if (isInput() && document.activeElement?.closest("#drw")) {
+    if (cursorOnInput && document.activeElement?.closest("#drw")) {
       console.log("from #drw input")
-      const el = document.querySelector("#drw article")
-      toggleVisibility(el, "toggle")
+      const el = document.querySelector("#drw .mg")
+      const res = toggleVisibility(el, "toggle")
+      console.log(res)
     } else if (
-      isInput() &&
-      document.activeElement
-        ?.closest("article.mg.oln")
-        ?.querySelector(".dln.ed")
+      cursorOnInput &&
+      document.activeElement?.closest(".mg.oln")?.querySelector(".dln.ed")
     ) {
       console.log("from editing input")
       const active = document.activeElement as
         | HTMLInputElement
         | HTMLTextAreaElement
-      await selectVisibilityClick(active.closest("article.mg"), "toggle")
+      await selectVisibilityClick(active.closest(".mg"), "toggle")
       active.focus()
+    } else {
+      const drw = document.querySelector("#drw .mg")
+      if (!drw) return
+      toggleVisibility(drw, "toggle")
     }
   } else {
-    const items = document.querySelectorAll("article.mg")
+    const items = document.querySelectorAll(".mg")
     const vis =
       action === "setAllPrivate" ? Visibility.OnlyMe : Visibility.Everyone
     for (const el of items) {
@@ -67,7 +72,7 @@ export function togglePublicity() {
       defineTerminalTarget({
         type: "terminal",
         keys: dltkeys.easy,
-        elements: () => document.querySelectorAll<HTMLElement>("h1.ikon"),
+        elements: () => document.querySelectorAll<HTMLElement>(".mg"),
         action: async (el, state) => {
           // closestUpubSeldButton(el)?.click()
           // await sleep(200)
@@ -76,7 +81,7 @@ export function togglePublicity() {
           //   document.querySelector(".upub.mini"),
           // )
 
-          await selectVisibilityClick(el.closest("article.mg"), "toggle")
+          await selectVisibilityClick(el, "toggle")
         },
       }),
     ],

@@ -1,3 +1,4 @@
+import "@/pure/prototypes"
 import { restoreLinks } from "./features/dlt-storage"
 
 const restored = restoreLinks()

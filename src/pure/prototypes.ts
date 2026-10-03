@@ -6,14 +6,12 @@ declare global {
   }
 }
 
-if (!Array.prototype.sum) {
-  Array.prototype.sum = function (this: number[]) {
-    return this.reduce((acc, current) => acc + current, 0)
-  }
+Array.prototype.sum = function (this: number[]) {
+  return this.reduce((acc, current) => acc + current, 0)
+}
 
-  Array.prototype.last = function <T>(this: T[]) {
-    return this.at(-1)
-  }
+Array.prototype.last = function <T>(this: T[]) {
+  return this.at(-1)
 }
 
 export {}

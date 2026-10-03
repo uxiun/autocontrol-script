@@ -1,3 +1,4 @@
+import "@/pure/prototypes"
 import runDlt from "./sites/dlt"
 
 const currentHost = window.location.hostname

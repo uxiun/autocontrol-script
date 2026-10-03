@@ -202,7 +202,6 @@ export interface ScrapeResult {
 
 export const scrapeWithFgBg = (limitOwn = true) => {
   console.log(`scrapeWithFgBg(limitOwn: ${limitOwn})`)
-  showToast("🔄", 500)
 
   const r: ScrapeResult = {
     list: [],
@@ -317,6 +316,18 @@ export const scrapeWithFgBg = (limitOwn = true) => {
   }
 
   console.log("scrapeWithFgBg:", r)
+
+  // showToast(
+  //   [
+  //     myListItem.length > 0 ? `&${myListItem.length}` : "",
+  //     r.inserted.length > 0 ? `+${r.inserted.length}` : "",
+  //     r.updated.length > 0 ? `^${r.updated.length}` : "",
+  //     r.moved.length > 0 ? `<${r.moved.length}` : "",
+  //   ]
+  //     .filter(Boolean)
+  //     .join(" "),
+  // )
+
   return r
 }
 
@@ -369,6 +380,22 @@ export const getListItems = (limitOwn = true) => {
 //     },
 //   ],
 // }
+
+export const dltUrl = (id: string, fgOrBg: "fg" | "bg") =>
+  `https://dlt.kitetu.com/?${fgOrBg}=${id.replace("#", "No.")}`
+
+export const openDltUrl = (
+  id: string,
+  fgOrBg: "fg" | "bg",
+  openInNewTab: boolean,
+) => {
+  const url = dltUrl(id, fgOrBg)
+  if (openInNewTab) {
+    window.open(url, "_blank", "noopener,noreferrer")
+  } else {
+    window.location.href = url
+  }
+}
 
 export type DltHintMapState = {
   mode: "open" | "pick"
@@ -524,8 +551,8 @@ export const dltHintMap: HintMap<State> = {
 }
 
 export const closestUpubSeldButton = (el: Element) =>
-  [...(el.closest("article.mg")?.querySelectorAll(".upub button") ?? [])].find(
-    btn => btn.classList.contains("seld"),
+  [...(el.closest(".mg")?.querySelectorAll(".upub button") ?? [])].find(btn =>
+    btn.classList.contains("seld"),
   ) as HTMLButtonElement | undefined
 
 export const toggleVisibility = (
@@ -533,7 +560,7 @@ export const toggleVisibility = (
   action: "toggle" | Visibility,
 ): undefined | { last: Visibility; current: Visibility } => {
   if (!closestBaseElement) return
-  const article = closestBaseElement.closest("article.mg.oln")
+  const article = closestBaseElement.closest(".mg")
   if (!article) return
   const btns = [...article.querySelectorAll(".upub button")]
   if (!btns) return
@@ -563,39 +590,3 @@ export const toggleVisibility = (
 
   return { last, current }
 }
-
-// export const toggleVisibilityClick = (
-//   closestBaseElement: Element,
-//   action: "toggle" | Visibility,
-// ): undefined | { last: Visibility; current: Visibility } => {
-//   const article = closestBaseElement.closest("article.mg.oln")
-//   if (!article) return
-//   const btns = [...article.querySelectorAll(".upub button")]
-//   if (!btns) return
-
-//   const i = btns.findIndex(btn => btn.classList.contains("seld"))
-
-//   const seld = btns[i] as HTMLButtonElement
-//   const value = seld.getAttribute("value")!
-//   const last = visibilityFromValue(value)!
-
-//   if (action === last) return { last, current: last }
-
-//   let n = 1
-//   if (action !== "toggle") {
-//     const j = btns.findIndex(
-//       btn => btn.getAttribute("value")! === VISIBILITY_MAP[last],
-//     )
-//     if (i < j) n = j - i
-//     else n = j + btns.length - i
-//   }
-
-//   // seld.classList.remove("seld")
-//   // next.classList.add("seld")
-
-//   seld.click()
-
-//   const current = action === "toggle" ? nextVisValue(last) : action
-
-//   return { last, current }
-// }

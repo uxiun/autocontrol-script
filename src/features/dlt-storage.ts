@@ -66,16 +66,16 @@ type Modify = {
 export const getAt = () => Date.now().toString(36)
 
 export const sortByAt = (a: PostLink, b: PostLink) => {
-  const atA = a.at || ""
-  const atB = b.at || ""
+  const atA = a.at ?? ""
+  const atB = b.at ?? ""
   if (atA < atB) return 1
   if (atA > atB) return -1
   return 0
 }
 
 export const sortByUpd = (a: PostLink, b: PostLink) => {
-  const updA = a.upd || a.at || ""
-  const updB = b.upd || b.at || ""
+  const updA = a.upd ?? a.at ?? ""
+  const updB = b.upd ?? b.at ?? ""
   if (updA < updB) return 1
   if (updA > updB) return -1
   return 0
@@ -161,7 +161,7 @@ export type IdTitleMap = Map<string, string>
 
 export const removeDuplicateOrEmpty = (links: PostLink[]) =>
   postLinksFromMap(
-    new Map(links.flatMap(l => (l.title.length > 0 ? [[l.id, l.title]] : []))),
+    new Map(links.flatMap(l => (l.title ? [[l.id, l.title]] : []))),
   )
 
 export const postLinksFromMap = (map: IdTitleMap): PostLink[] =>
@@ -244,7 +244,7 @@ export function mergeLinksFast(
         result.updated.push(updatedLink)
         return false
       } else if (
-        (oldLink.upd || oldLink.at || "") < (newLink.upd || newLink.at || "")
+        (oldLink.upd ?? oldLink.at ?? "") < (newLink.upd ?? newLink.at ?? "")
       ) {
         result.moved.push(newLink)
         return false
@@ -274,10 +274,13 @@ export function mergeLinksFast(
     }
   })
 
-  const sorted = [...result.moved, ...filteredHistory].sort(sortByUpd)
-
   // 💡 結合の並び順: [ 完全新規(inserted) + タイトル更新(updated) ] を最先頭に、その後に既存の順序を維持した配列
-  const updatedHistory = [...result.inserted, ...result.updated, ...sorted]
+  const updatedHistory = [
+    ...result.inserted,
+    ...result.updated,
+    ...result.moved.sort(sortByUpd),
+    ...filteredHistory.sort(sortByUpd),
+  ]
 
   return {
     links: updatedHistory,
@@ -416,6 +419,102 @@ export function searchLinks(query: string, links: PostLink[]) {
   }
 
   return results.sort((a, b) => b.score - a.score).map(r => r.link)
+}
+
+// キーワード群によるAND包含検索 ＆ スコアリングロジック
+export function searchLinksFg(query: string, links: PostLink[]) {
+  const keywords = query.split(/\s+/).filter(Boolean)
+  if (keywords.length === 0) return links
+
+  function scoring(source: string) {
+    const src = source.toLowerCase()
+    let score = 0
+    for (const keyword of keywords) {
+      const kw = keyword.toLowerCase()
+      const idx = src.indexOf(kw)
+      if (idx === -1) continue
+
+      // 【スコアリング・アルゴリズム】
+      // let kwScore = Math.max(0, 100 - idx)
+      if (src === kw) score += 5000
+      else if (idx === 0) score += kw.length + 1 === src.length ? 1500 : 1000
+      else if (src.charAt(idx - 1) === " ")
+        score += kw.length + 1 === src.length ? 1000 : 500
+      else score += kw.length + 1 === src.length ? 1000 : 100
+    }
+
+    return score
+  }
+
+  const results: { link: PostLink; score: number }[] = []
+  const idToLinkMap = new Map(links.map(link => [link.id, link]))
+
+  for (const link of links) {
+    const fgs = link.fg
+      ? (link.fg.map(id => idToLinkMap.get(id)).filter(Boolean) as PostLink[])
+      : []
+
+    const score =
+      scoring(link.title) + fgs.map(fg => scoring(fg.title)).sum() / 20
+
+    if (score) {
+      // totalScore += link.use ?? 0 // 使用回数ボーナス
+      results.push({ link, score })
+    }
+  }
+
+  results.sort((a, b) => b.score - a.score)
+
+  for (const { link, score } of results) {
+    console.log(
+      score,
+      link.title,
+      link.fg?.map(id => idToLinkMap.get(id)?.title),
+    )
+  }
+
+  return results.map(r => r.link)
+}
+
+export function searchLinksGroup(query: string, links: PostLink[]) {
+  const result: {
+    total: PostLink[]
+    prefix: PostLink[]
+    wordPrefix: PostLink[]
+    sub: PostLink[]
+  } = {
+    total: [],
+    prefix: [],
+    wordPrefix: [],
+    sub: [],
+  }
+
+  const keywords = query.split(/\s+/).filter(Boolean)
+  if (keywords.length === 0) return result
+
+  for (const link of links) {
+    const titleLower = link.title.toLowerCase()
+
+    let isMatch = true
+    let totalScore = 0
+
+    for (const keyword of keywords) {
+      const kw = keyword.toLowerCase()
+      const idx = titleLower.indexOf(kw)
+
+      if (idx === -1) {
+        isMatch = false
+        break
+      }
+
+      if (titleLower === kw) result.total.push(link)
+      else if (idx === 0) result.prefix.push(link)
+      else if (titleLower.charAt(idx - 1) === " ") result.wordPrefix.push(link)
+      else result.sub.push(link)
+    }
+  }
+
+  return result
 }
 
 // 初回だけ localStorage から IDB へ引越しさせる関数

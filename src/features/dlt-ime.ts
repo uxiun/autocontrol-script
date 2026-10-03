@@ -5,6 +5,7 @@ import {
   PostLink,
   postLinkText,
   searchLinks,
+  searchLinksFg,
   useCount,
 } from "./dlt-storage"
 import {
@@ -13,7 +14,6 @@ import {
   setupTabSyncListener,
 } from "./dlt-db"
 import { candidateLink } from "./dlt-component"
-import { isImeCandidateVisible } from "./ime"
 
 type IMEOption = {
   suggestionNumbers: number
@@ -25,6 +25,7 @@ const defaultIMEOption: IMEOption = {
 
 type IMEState = {
   isActive: boolean
+  // isPopupVisible: boolean
   candidates: PostLink[]
   history: PostLink[]
   selectedIndex: number
@@ -37,6 +38,7 @@ type IMEState = {
 
 let imeState: IMEState = {
   isActive: false,
+  // isPopupVisible: true,
   candidates: [] as PostLink[],
   history: [] as PostLink[],
   selectedIndex: 0,
@@ -58,13 +60,13 @@ async function syncIDB(state: IMEState) {
 
 // キーワード群によるAND包含検索 ＆ スコアリングロジック
 function searchHistoryFast(option: IMEOption, state: IMEState) {
-  return searchLinks(state.query, state.history).slice(
+  return searchLinksFg(state.query, state.history).slice(
     0,
     option.suggestionNumbers,
   )
 }
 
-function runSearch(option: IMEOption, state: IMEState) {
+function runSearch(option: IMEOption, state: IMEState): IMEState {
   console.log("runSearch, state:", state)
   const matched = searchHistoryFast(option, state)
 
@@ -81,7 +83,11 @@ function runSearch(option: IMEOption, state: IMEState) {
 }
 
 function renderWidget(state: IMEState, inlinePopup: InlineSuggestPopup) {
-  if (!state.isActive || !state.target || isImeCandidateVisible()) {
+  if (
+    !state.isActive ||
+    !state.target
+    // || !state.isPopupVisible
+  ) {
     inlinePopup.hide()
     return
   }
@@ -215,8 +221,13 @@ export function dltIME(option = defaultIMEOption) {
   window.addEventListener(
     "keydown",
     e => {
-      if (!imeState.isActive || isImeCandidateVisible()) return
-      const imePopup = document.getElementById("ac-inline-ime-popup")
+      if (!imeState.isActive) return
+
+      if ((window as any).__ime_popup__) {
+        console.log("window.__ime_popup__")
+        return
+      }
+      const imePopup = document.getElementById("inline-ime-popup")
       if (imePopup)
         console.log("imePopup.style.display:", imePopup.style.display)
       if (
@@ -228,6 +239,77 @@ export function dltIME(option = defaultIMEOption) {
         return
 
       const target = e.target as HTMLTextAreaElement | HTMLInputElement
+
+      if (target.matches("#kw")) {
+        switch (e.key) {
+          case "ArrowDown": {
+            if (!imeState.isActive) return
+            e.preventDefault()
+            e.stopPropagation()
+            imeState.selectedIndex =
+              (imeState.selectedIndex + 1) % imeState.candidates.length
+            break
+          }
+
+          case "ArrowUp": {
+            if (!imeState.isActive) return
+            e.preventDefault()
+            e.stopPropagation()
+            const len = imeState.candidates.length
+            imeState.selectedIndex = (imeState.selectedIndex - 1 + len) % len
+            break
+          }
+
+          case "Tab": {
+            if (imeState.candidates.length === 0) return
+            e.preventDefault()
+            e.stopPropagation()
+            // imeState.isPopupVisible = !imeState.isPopupVisible
+            imeState.isActive = !imeState.isActive
+            break
+          }
+
+          case "Enter": {
+            if (!imeState.isActive) return
+            const selected = imeState.candidates[imeState.selectedIndex]
+            if (!selected) return
+
+            e.preventDefault()
+            e.stopPropagation()
+
+            const replacement = e.ctrlKey
+              ? postLinkText(selected)
+              : selected.title
+            const value = target.value
+
+            target.value =
+              value.slice(0, imeState.startPos) +
+              replacement +
+              value.slice(imeState.endPos)
+
+            const newCaretPos = imeState.startPos + replacement.length
+            target.setSelectionRange(newCaretPos, newCaretPos)
+
+            imeState.isActive = false
+            inlinePopup.hide()
+
+            const updatedSelected = useCount(selected)
+            const { links } = mergeLinksStorage(DLT_DOCK_KEY, [updatedSelected])
+            window.dispatchEvent(
+              new CustomEvent("dlt-dock-updated", { detail: links }),
+            )
+
+            mergeLinksToIDB([updatedSelected], imeState.history).then(m => {
+              imeState.history = m.links
+            })
+
+            break
+          }
+        }
+
+        renderWidget(imeState, inlinePopup)
+        return
+      }
 
       // --- Tab / Shift+Tab による候補選択のローテーション ---
       if (e.key === "Tab") {
@@ -248,12 +330,14 @@ export function dltIME(option = defaultIMEOption) {
 
       // --- Enter による確定 ---
       if (e.key === "Enter") {
-        if (imeState.selectedIndex !== -1) {
+        const selected = imeState.candidates[imeState.selectedIndex]
+        // if (imeState.selectedIndex !== -1) {
+
+        if (selected) {
           e.preventDefault()
           e.stopPropagation()
           e.stopImmediatePropagation()
 
-          const selected = imeState.candidates[imeState.selectedIndex]
           const replacement = postLinkText(selected)
           const value = target.value
 
@@ -489,12 +573,23 @@ function getPopupPosition(
   return _getPopupPosition(inputEl, startPos)
 }
 
-function getInlineImeContext(inputEl: HTMLTextAreaElement | HTMLInputElement) {
+function getInlineImeContext(inputEl: HTMLTextAreaElement | HTMLInputElement): {
+  query: string
+  startPos: number
+  endPos: number
+} | null {
   const text = inputEl.value
   const caretPos = inputEl.selectionStart ?? 0
 
   const beforeCaret = text.slice(0, caretPos)
   const afterCaret = text.slice(caretPos)
+
+  if (inputEl.matches("#kw"))
+    return {
+      query: beforeCaret,
+      startPos: 0,
+      endPos: caretPos,
+    }
 
   // 1. キャレットより手前に最も近い "{" を取得
   const lastOpenBraceIndex = beforeCaret.lastIndexOf("{")

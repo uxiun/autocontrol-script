@@ -19,7 +19,7 @@ export const candidateLink = (
   option?: Partial<CandidateLinkOption>,
 ) => {
   // const bg = isSelected ? "#313244" : "rgba(24, 24, 37, 0.88)"
-  const bg = isSelected ? "rgb(204, 230, 255)" : "rgba(24, 24, 37, 0.88)"
+  const bg = isSelected ? "rgb(204, 230, 255)" : "rgba(24, 24, 37, 0.95)"
   const border = isSelected
     ? "1px solid #89b4fa"
     : "1px solid rgba(69, 71, 90, 0.6)"
@@ -40,7 +40,7 @@ export const candidateLink = (
   const fgHtml =
     option?.withFg === false || fgTitles.length === 0
       ? ""
-      : `<div style="font-size: ${option?.fgFontSize ?? "14px"}; color: ${isSelected ? "rgb(33, 95, 175)" : "#89b4fa"}; margin-bottom: 2px; white-space: nowrap; ${isSelected ? "font-weight: bold;" : ""}">
+      : `<div style="font-size: ${option?.fgFontSize ?? "14px"}; color: ${isSelected ? "rgb(33, 95, 175)" : "rgb(161, 205, 255)"}; margin-bottom: 2px; white-space: nowrap; ${isSelected ? "font-weight: bold;" : ""}">
                 ${fgTitles.join("｜")}
                </div>`
 
@@ -52,8 +52,16 @@ export const candidateLink = (
         // 文字列埋め込みは危険&バグる
         option?.withId === false
           ? `<span>${cand.title}</span>`
-          : `<span style="margin-right: 5px">${cand.title}</span>
-        <span style="font-size: 10px; font-family: monospace; opacity: .5;">${linkIdText(cand)}</span>
+          : `<span>${cand.title}</span>
+        ${
+          !fgTitles.length || !cand.title
+            ? `<span style="
+            margin-left: 5px;
+            font-size: 10px;
+            font-family: monospace;
+            opacity: .8;">${linkIdText(cand)}</span>`
+            : ""
+        }
         `
       }
       </div>

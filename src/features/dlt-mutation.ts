@@ -32,7 +32,12 @@ export async function watchDltPage() {
     const myListItem = getListItems(true)
 
     // 実際に変化があった時だけイベント発火＆トースト表示
-    if (r.inserted.length > 0 || r.updated.length > 0 || r.moved.length > 0) {
+    if (
+      myListItem.length ||
+      r.inserted.length ||
+      r.updated.length ||
+      r.moved.length
+    ) {
       window.dispatchEvent(
         new CustomEvent("dlt-history-updated", { detail: res }),
       )

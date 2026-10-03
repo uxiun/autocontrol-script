@@ -20,6 +20,7 @@ import {
   postLinkTextList,
   restoreLinks,
   searchLinks,
+  searchLinksFg,
   useCount,
 } from "./dlt-storage"
 import { dltkeys } from "./keys"
@@ -33,7 +34,7 @@ import {
   initializeCache,
   restoreUserAdded,
 } from "./ime"
-import { dltHintMap, DltHintMapState } from "./dlt-dom"
+import { dltHintMap, DltHintMapState, openDltUrl } from "./dlt-dom"
 
 export interface AppState {
   history: PostLink[]
@@ -282,14 +283,21 @@ export async function startLinkMemo(option: LinkMemoOption) {
       if (appState.isSearching) {
         if (e.isComposing) return
 
-        if (!noModifiers) return
-
         // 現在のページに表示されている検索結果のサブセットを取得
         const currentItems = getPagedItems(appState)
         const maxPage = Math.max(
           1,
           Math.ceil(appState.searchResults.length / appState.numbersOfPage),
         )
+
+        if (e.ctrlKey && e.key === "Enter") {
+          const target = currentItems[appState.cursorIndex]
+          if (target) {
+            openDltUrl(target.id, "fg", true)
+          }
+        }
+
+        if (!noModifiers) return
 
         if (e.key === "ArrowDown") {
           e.preventDefault()
@@ -350,12 +358,10 @@ export async function startLinkMemo(option: LinkMemoOption) {
 
           handleSearch("", appState)
           const dock = [...appState.leftDock]
-          const res = executeLinkOperation(appState.leftDock, getAt())
-          if (res.executed) {
-            const updated = dock.map(useCount)
-            const res = await mergeLinksToIDB(updated, appState.history)
-            appState.history = res.links
-          }
+          const updated = dock.map(useCount)
+          const res = await mergeLinksToIDB(updated, appState.history)
+          appState.history = res.links
+          executeLinkOperation(appState.leftDock)
           handleSearch("", appState)
           renderWidget(appState)
           return
@@ -368,7 +374,7 @@ export async function startLinkMemo(option: LinkMemoOption) {
           return
         }
 
-        if (e.key === "Enter" && !e.isComposing) {
+        if (e.key === "Enter") {
           e.preventDefault()
           e.stopPropagation()
           const target = currentItems[appState.cursorIndex]
@@ -410,8 +416,9 @@ export async function startLinkMemo(option: LinkMemoOption) {
           e.preventDefault()
           e.stopPropagation()
           const target = currentItems[appState.cursorIndex]
-          console.log(target)
-          showToast(JSON.stringify(target), 2000)
+          if (target) {
+            openDltUrl(target.id, "bg", true)
+          }
           return
         }
 
@@ -421,6 +428,12 @@ export async function startLinkMemo(option: LinkMemoOption) {
       // -------------------------------------------------------------
       // パターンB：右の自動履歴欄に疑似フォーカス中の場合
       // -------------------------------------------------------------
+      const currentItems = getPagedItems(appState)
+      const maxPage = Math.max(
+        1,
+        Math.ceil(appState.history.length / appState.numbersOfPage),
+      )
+
       if (e.ctrlKey) {
         switch (e.key) {
           case "s": {
@@ -474,6 +487,14 @@ export async function startLinkMemo(option: LinkMemoOption) {
             showToast(`IME Cache Initilized!`)
             break
           }
+
+          case "Enter": {
+            const target = appState.history[appState.cursorIndex]
+            if (target) {
+              openDltUrl(target.id, "fg", true)
+            }
+            break
+          }
         }
       }
 
@@ -515,12 +536,6 @@ export async function startLinkMemo(option: LinkMemoOption) {
         }
         return
       }
-
-      const currentItems = getPagedItems(appState)
-      const maxPage = Math.max(
-        1,
-        Math.ceil(appState.history.length / appState.numbersOfPage),
-      )
 
       switch (e.key) {
         case "ArrowDown": {
@@ -608,13 +623,10 @@ export async function startLinkMemo(option: LinkMemoOption) {
         case " ": {
           e.preventDefault()
           e.stopPropagation()
-          const dock = [...appState.leftDock]
-          const res = executeLinkOperation(appState.leftDock, getAt())
-          if (res.executed) {
-            const updated = dock.map(useCount)
-            const res = await mergeLinksToIDB(updated, appState.history)
-            appState.history = res.links
-          }
+          const updated = appState.leftDock.map(useCount)
+          const res = await mergeLinksToIDB(updated, appState.history)
+          appState.history = res.links
+          executeLinkOperation(appState.leftDock)
           break
         }
         case "Tab": {
@@ -622,8 +634,9 @@ export async function startLinkMemo(option: LinkMemoOption) {
           e.stopPropagation()
 
           const target = currentItems[appState.cursorIndex]
-          console.log(target)
-          showToast(JSON.stringify(target), 2000)
+          if (target) {
+            openDltUrl(target.id, "bg", true)
+          }
           break
         }
 
@@ -651,7 +664,7 @@ function handleSearch(query: string, state: AppState) {
     state.searchResults = [...state.history]
     return
   }
-  state.searchResults = searchLinks(state.searchQuery, state.history)
+  state.searchResults = searchLinksFg(state.searchQuery, state.history)
 }
 
 export function renderWidget(state: AppState) {
@@ -872,7 +885,7 @@ async function executeCopy(links: PostLink[]) {
   }
 }
 
-function executeLinkOperation(links: PostLink[], at: string) {
+function executeLinkOperation(links: PostLink[]) {
   console.log("🚚 出荷実行!! リンク数:", links.length, links)
 
   interface State {

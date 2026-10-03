@@ -1085,7 +1085,7 @@ const state = globalImeState
 export const getImeState = () => ({ ...state })
 export const initializeCache = () => state.cache.init()
 
-export const isImeCandidateVisible = () => state.candidates.length > 0
+// export const isImeCandidateVisible = () => state.active && state.candidates.length > 0
 
 export class InlineSuggestPopup {
   private el: HTMLDivElement
